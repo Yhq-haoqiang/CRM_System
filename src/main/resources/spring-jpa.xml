@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:jpa="http://www.springframework.org/schema/data/jpa"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd
+		http://www.springframework.org/schema/data/jpa http://www.springframework.org/schema/data/jpa/spring-jpa-1.8.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.3.xsd">
+	
+	
+	<context:component-scan base-package="com.yhq.service" /> 
+	<!-- <context:component-scan base-package="com.rr.dao" /> -->
+
+	<context:property-placeholder location="classpath:jdbc.properties"/>
+	<bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource">
+		<property name="driverClassName" value="${driver}" />
+		<property name="url" value="${url}" />
+		<property name="username" value="${user}" />
+		<property name="password" value="${pass}" />
+		<property name="maxActive" value="50000" />
+		<property name="maxIdle" value="10" />
+		<property name="minIdle" value="2" />
+	</bean>
+	
+	<bean id="hibernateJpaVendorAdapter" class="org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter">
+		<property name="databasePlatform" value="org.hibernate.dialect.MySQL5InnoDBDialect"/>
+		<property name="showSql"  value="true"/>
+	</bean>
+	
+	<bean id="lcemf" class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+		<property name="dataSource" ref="dataSource"/>
+		<property name="packagesToScan" value="com.yhq.pojo" />
+		<property name="jpaVendorAdapter" ref="hibernateJpaVendorAdapter" />
+		<property name="jpaProperties" >
+			<props>
+				<prop key="hibernate.format_sql">true</prop>
+			</props>
+		</property>
+	</bean>
+	
+	<bean id="jpaTx" class="org.springframework.orm.jpa.JpaTransactionManager">
+		<property name="entityManagerFactory"  ref="lcemf"/>
+	</bean>
+	<tx:annotation-driven proxy-target-class="false" transaction-manager="jpaTx"/>
+	<!-- 启动仓库扫描 -->
+	<jpa:repositories base-package="com.yhq.dao" entity-manager-factory-ref="lcemf" transaction-manager-ref="jpaTx"/>
+	
+	
+	
+	<!-- 自定义Realm -->
+    <bean id="myRealm" class="com.yhq.utils.MyRealm"/>  
+	
+	<!--自定义LogoutFilter,退出--> 
+	<bean id="logoutFilter" class="com.yhq.utils.SysLogoutFilter">  
+      <property name="redirectUrl" value="/login.jsp"/>
+ 	 </bean>
+	
+    <!-- 安全管理器 -->
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager"> 
+      <property name="realm" ref="myRealm"/>  
+    </bean>  
+
+    <!-- Shiro过滤器 -->
+    <bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">  
+        <!-- Shiro的核心安全接口,这个属性是必须的 -->  
+        <property name="securityManager" ref="securityManager"/>
+        <!-- 身份认证失败，则跳转到登录页面的配置 -->  
+        <property name="loginUrl" value="/login.jsp"/>
+        <!-- 权限认证失败，则跳转到指定页面 -->  
+        <property name="unauthorizedUrl" value="/login.jsp"/>
+        <!--自定义的filter--> 
+        <property name="filters">
+        	<map>
+        		<!-- 将自定义 的FormAuthenticationFilter注入shiroFilter中 -->  
+               <!-- <entry key="authc" value-ref="formAuthenticationFilter"/>   -->
+               <entry key="logout" value-ref="logoutFilter"/>
+        	</map>
+        	
+        </property>
+        
+        
+        <!-- Shiro连接约束配置,即过滤链的定义 -->  
+        <!-- 此处可配合我的这篇文章来理解各个过滤连的作用http://blog.csdn.net/jadyer/article/details/12172839 -->  
+        <!-- 下面value值的第一个'/'代表的路径是相对于HttpServletRequest.getContextPath()的值来的 -->  
+        <!-- anon：它对应的过滤器里面是空的,什么都没做,这里.do和.jsp后面的*表示参数,比方说login.jsp?main这种 -->  
+        <!-- authc：该过滤器下的页面必须验证后才能访问,它是Shiro内置的一个拦截器org.apache.shiro.web.filter.authc.FormAuthenticationFilter --> 
+         <property name="filterChainDefinitions">
+            <value>
+           	    /login*=anon
+           	    /css/**=anon
+           	    /datepicker/**=anon
+           	    /images/**=anon
+           	    /js/**=anon
+           	    /WEB-INF/jsp/index.jsp=authc
+           	    /logout=logout  <!-- //这才是对退出的配置 -->
+           	   <!--  /left*=authc
+           	    /right*=authc
+           	    /slideTest*=authc
+           	    /switch*=authc
+           	    /top*=authc -->
+           	    /**=authc
+               <!--  /user/student*/**=roles[teacher]
+                /user/teacher*/**=perms["user:create"] -->
+            </value>  
+        </property>
+    </bean>  
+
+    <!-- 保证实现了Shiro内部lifecycle函数的bean执行 -->  
+    <bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>  
+    <!-- 开启Shiro注解 -->
+    <bean class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator" depends-on="lifecycleBeanPostProcessor"/>  
+        <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">  
+      <property name="securityManager" ref="securityManager"/>  
+    </bean>  
+	
+
+</beans>
